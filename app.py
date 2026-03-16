@@ -8,44 +8,72 @@ import time
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Auto Pareto Generator", layout="centered", page_icon="⚙️")
+
+# --- SECURITY GATE (PASSWORD) ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("🔒 Access Restricted")
+    st.write("Please enter the access key to use the Pareto Generator.")
+    pwd = st.text_input("Access Key:", type="password")
+    
+    if st.button("Login"):
+        if pwd == "Pricol2024!": 
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Incorrect access key. Please try again.")
+    st.stop() 
+
+# --- MAIN APP LOGIC ---
 st.title("⚙️ Auto Pareto Chart Generator")
-st.write("Upload your defect data to instantly generate a clean Pareto chart.")
+st.write("Upload your data to instantly generate a clean Pareto chart.")
 
 # --- FILE UPLOADER ---
-uploaded_file = st.file_uploader("Upload your file", type=["csv", "xlsx", "xls"])
+uploaded_file = st.file_uploader("Upload your Excel or CSV file here", type=["csv", "xlsx", "xls"])
 
 if uploaded_file is not None:
     try:
         # --- SHEET SELECTION LOGIC ---
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
-            st.success("CSV file loaded.")
+            st.success("CSV file loaded successfully!")
         else:
-            # Read the Excel file metadata to find the sheets
             xls = pd.ExcelFile(uploaded_file)
             sheet_names = xls.sheet_names
             
-            # If there are multiple sheets, show a dropdown
             if len(sheet_names) > 1:
-                selected_sheet = st.selectbox("📂 Select Excel Tab/Sheet:", sheet_names)
+                selected_sheet = st.selectbox("📂 Your Excel file has multiple tabs. Select the one you want to use:", sheet_names)
             else:
                 selected_sheet = sheet_names[0]
                 
-            # Load the specific sheet chosen by the user
             df = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
-            st.success(f"Sheet '{selected_sheet}' loaded.")
+            st.success(f"Excel Tab '{selected_sheet}' loaded successfully!")
         
-        st.divider() # Adds a clean horizontal line
+        st.divider()
         
+        # --- PARETO TYPE SELECTION ---
+        st.write("### 1. Analysis Type")
+        pareto_type = st.radio(
+            "What type of Pareto are you generating?",
+            ["Defect Pareto", "Part Pareto"],
+            horizontal=True
+        )
+        
+        category_label = "Defect" if pareto_type == "Defect Pareto" else "Part"
+        
+        st.divider()
+
         # --- OPTIONAL FILTERING (SECOND-LEVEL PARETO) ---
-        st.write("### 1. Filter Data (Optional)")
-        st.write("Select a column to filter by a specific Vendor, Part, or Line.")
+        st.write("### 2. Filter Data (Optional)")
+        st.write("Want to look at just one specific vendor or part? Select a column here to filter the data.")
         
         filter_col = st.selectbox("Filter by Column:", ["No Filter"] + list(df.columns))
         
         if filter_col != "No Filter":
             unique_values = df[filter_col].dropna().unique()
-            filter_val = st.selectbox(f"Select the specific {filter_col} to analyze:", unique_values)
+            filter_val = st.selectbox(f"Select the specific {filter_col} you want to look at:", unique_values)
             working_df = df[df[filter_col] == filter_val].copy()
             dynamic_prefix = str(filter_val)
         else:
@@ -53,42 +81,48 @@ if uploaded_file is not None:
             dynamic_prefix = "Overall"
             
         # --- CHART DETAILS & SETTINGS ---
-        st.write("### 2. Chart Settings")
+        st.write("### 3. Chart Settings")
         col_title, col_month = st.columns(2)
         with col_title:
-            custom_title = st.text_input("Custom Title Prefix", dynamic_prefix)
+            custom_title = st.text_input("Custom Title (Shows at the top of the chart)", dynamic_prefix)
         with col_month:
             report_month = st.text_input("Month & Year", "Feb 2024")
             
         col1, col2 = st.columns(2)
         with col1:
-            defect_col = st.selectbox("Column: Defect Names", working_df.columns)
+            category_col = st.selectbox(f"Column: {category_label} Names", working_df.columns)
         with col2:
-            qty_col = st.selectbox("Column: Quantities", working_df.columns)
+            qty_col = st.selectbox("Column: Quantities (Must be numbers!)", working_df.columns)
             
-        top_n = st.slider("Top defects to show before grouping into 'Others'", min_value=5, max_value=35, value=15)
+        top_n = st.slider(f"How many top {category_label.lower()}s to show before grouping the rest into 'Others'?", min_value=5, max_value=35, value=15)
             
         # --- GENERATE CHART BUTTON ---
         if st.button("Generate Pareto Chart"):
             
             if working_df.empty:
-                st.warning("No data found for this selection! Please adjust your filters.")
+                st.error("🛑 **Oops! There is no data for this specific filter.**")
+                st.warning("👉 **How to fix it:** Try selecting a different filter in Step 2, or change it back to 'No Filter'.")
+            
+            # --- LAYMAN-PROOF DATA VALIDATION ---
+            elif not pd.api.types.is_numeric_dtype(working_df[qty_col]):
+                st.error(f"🛑 **Wait a second!** The column you chose for Quantities (`{qty_col}`) has text or words in it.")
+                st.warning("👉 **How to fix it:** Go to 'Step 3: Chart Settings' above. Change the **'Column: Quantities'** box to a column that only has numbers (like 1, 5, 144) so the chart can do the math.")
+            
             else:
-                # Mechanical loading spinner
-                with st.spinner("Processing data and generating chart..."):
+                with st.spinner("Crunching the numbers and drawing the chart..."):
                     
                     # 1. Data Processing
-                    processed_df = working_df.groupby(defect_col)[qty_col].sum().reset_index()
+                    processed_df = working_df.groupby(category_col)[qty_col].sum().reset_index()
                     processed_df = processed_df.sort_values(by=qty_col, ascending=False).reset_index(drop=True)
                     
                     # 2. Group into "Others"
                     if len(processed_df) > top_n:
                         top_df = processed_df.iloc[:top_n].copy()
                         others_qty = processed_df.iloc[top_n:][qty_col].sum()
-                        others_df = pd.DataFrame({defect_col: ['Others (Combined)'], qty_col: [others_qty]})
+                        others_df = pd.DataFrame({category_col: ['Others (Combined)'], qty_col: [others_qty]})
                         processed_df = pd.concat([top_df, others_df], ignore_index=True)
                     
-                    raw_labels = processed_df[defect_col].astype(str).tolist()
+                    raw_labels = processed_df[category_col].astype(str).tolist()
                     counts = processed_df[qty_col].tolist()
                     
                     labels = [textwrap.fill(label, width=18) for label in raw_labels]
@@ -125,7 +159,7 @@ if uploaded_file is not None:
                         ax2.text(i, cumulative_percent[i] + 2, f'{cumulative_percent[i]:.1f}%', 
                                  ha='center', va='bottom', color=line_color, fontweight='bold', fontsize=8)
 
-                    chart_title = f"{custom_title} - Defect Pareto Analysis ({report_month})"
+                    chart_title = f"{custom_title} - {pareto_type} Analysis ({report_month})"
                     plt.title(chart_title, fontsize=18, fontweight='bold', pad=20)
                     
                     ax1.grid(axis='y', linestyle='--', alpha=0.6)
@@ -138,14 +172,13 @@ if uploaded_file is not None:
 
                     plt.tight_layout()
                     
-                    # Simulate a brief mechanical processing time if the data is very small
                     time.sleep(0.5) 
                     
                     # 4. Display Chart
                     st.pyplot(fig)
                     
-                    # Subtle confirmation notification
-                    st.toast("Pareto analysis complete.", icon="⚙️")
+                    st.toast(f"{pareto_type} generated successfully.", icon="✅")
                 
     except Exception as e:
-        st.error(f"Error processing the file. Please check the data format. Error details: {e}")
+        st.error("🛑 **Something went wrong while reading your file!**")
+        st.warning(f"👉 **How to fix it:** Make sure your Excel sheet doesn't have merged cells or completely blank rows at the very top. \n\n *(Technical error: {e})*")
