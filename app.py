@@ -30,7 +30,7 @@ if not st.session_state.authenticated:
 
 # --- MAIN APP LOGIC ---
 st.title("⚙️ Auto Pareto Chart Generator")
-st.write("Connect live data or upload a file to instantly generate a crisp, high-definition Pareto chart.")
+st.write("Connect live data or upload a file to instantly generate crisp, high-definition quality charts.")
 
 # --- DATA SOURCE TOGGLE ---
 st.write("### Step 1: Choose Data Source")
@@ -103,7 +103,7 @@ try:
             dynamic_prefix = "Pricol" 
             
         # --- CHART DETAILS & SETTINGS ---
-        st.write("### Step 4: Chart Settings")
+        st.write("### Step 4: Pareto Chart Settings")
         col_title, col_month = st.columns(2)
         with col_title:
             custom_title = st.text_input("Custom Title Prefix", dynamic_prefix)
@@ -118,18 +118,27 @@ try:
             qty_col = st.selectbox("Column: Quantities (Must be numbers!)", working_df.columns)
             
         top_n = st.slider(f"How many top {pareto_category.lower()}s to show before grouping the rest into 'Others'?", min_value=5, max_value=40, value=25)
+        
+        # --- NEW STEP: PIE CHART FEATURE ---
+        st.write("### Step 5: Additional Visuals (Optional)")
+        show_pie_chart = st.checkbox("Include a Pie Chart for Color/Attribute breakdown?")
+        
+        if show_pie_chart:
+            pie_col = st.selectbox("Select the column containing the Colors (or other attribute):", working_df.columns)
             
         # --- GENERATE CHART BUTTON ---
-        if st.button("Generate Pareto Chart"):
+        if st.button("Generate Charts"):
             
             if working_df.empty:
                 st.error("🛑 **Oops! There is no data for this specific filter.**")
             elif not pd.api.types.is_numeric_dtype(working_df[qty_col]):
                 st.error(f"🛑 **Wait a second!** The column you chose for Quantities (`{qty_col}`) has text or words in it.")
             else:
-                with st.spinner("Crunching the numbers and drawing the chart..."):
+                with st.spinner("Crunching the numbers and drawing the charts..."):
                     
                     working_df[qty_col] = working_df[qty_col].fillna(0).astype(int) 
+                    
+                    # --- 1. PARETO CHART LOGIC ---
                     processed_df = working_df.groupby(category_col)[qty_col].sum().reset_index()
                     processed_df = processed_df.sort_values(by=qty_col, ascending=False).reset_index(drop=True)
                     
@@ -219,16 +228,53 @@ try:
                     
                     time.sleep(0.5) 
                     
+                    # Displaying Pareto Charts
                     tab1, tab2 = st.tabs(["📊 Normal View", "🎯 80% Highlighted View"])
-                    
                     with tab1:
                         st.pyplot(fig_normal)
-                        
                     with tab2:
                         st.pyplot(fig_highlighted)
-                        st.info("💡 **Pro Tip:** In this view, the bars that contribute to the top 80% of your total volume are highlighted in blue. The 'trivial many' are grayed out.")
+                        st.info("💡 **Pro Tip:** In this view, the bars that contribute to the top 80% of your total volume are highlighted in blue.")
                     
-                    st.toast(f"{pareto_category} Pareto generated successfully.", icon="✅")
+                    # --- 2. PIE CHART LOGIC ---
+                    if show_pie_chart:
+                        st.divider()
+                        st.write(f"### 🎨 Breakdown by {pie_col}")
+                        
+                        # Process data for pie chart
+                        pie_df = working_df.groupby(pie_col)[qty_col].sum().reset_index()
+                        pie_df = pie_df[pie_df[qty_col] > 0] # Remove items with 0 quantity
+                        pie_df = pie_df.sort_values(by=qty_col, ascending=False)
+                        
+                        # Generate Pie Chart
+                        fig_pie, ax_pie = plt.subplots(figsize=(10, 6), dpi=300)
+                        
+                        # Using a clean color palette
+                        colors = plt.cm.tab20.colors 
+                        
+                        wedges, texts, autotexts = ax_pie.pie(
+                            pie_df[qty_col], 
+                            labels=pie_df[pie_col].astype(str), 
+                            autopct='%1.1f%%', 
+                            startangle=140,
+                            colors=colors,
+                            wedgeprops={'edgecolor': 'white', 'linewidth': 1.5}
+                        )
+                        
+                        # Formatting Pie Chart text
+                        plt.setp(autotexts, size=11, weight="bold", color="white")
+                        plt.setp(texts, size=12)
+                        
+                        ax_pie.set_title(f"Contribution by {pie_col} ({report_month})", fontsize=18, fontweight='bold', pad=20)
+                        
+                        # Make it perfectly circular
+                        ax_pie.axis('equal')  
+                        plt.tight_layout()
+                        
+                        # Display Pie Chart
+                        st.pyplot(fig_pie)
+
+                    st.toast("Charts generated successfully!", icon="✅")
 
 except Exception as e:
     st.error("🛑 **Something went wrong while connecting to your data!**")
