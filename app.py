@@ -6,6 +6,7 @@ import numpy as np
 import textwrap
 import time
 from datetime import datetime
+import re 
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Auto Pareto Generator", layout="wide", page_icon="⚙️")
@@ -29,38 +30,67 @@ if not st.session_state.authenticated:
 
 # --- MAIN APP LOGIC ---
 st.title("⚙️ Auto Pareto Chart Generator")
-st.write("Upload your data to instantly generate a crisp, high-definition Pareto chart.")
+st.write("Connect live data or upload a file to instantly generate a crisp, high-definition Pareto chart.")
 
-# --- FILE UPLOADER ---
-uploaded_file = st.file_uploader("Upload your Excel or CSV file here", type=["csv", "xlsx", "xls"])
+# --- DATA SOURCE TOGGLE ---
+st.write("### Step 1: Choose Data Source")
+data_source = st.radio("How do you want to import your data?", ["🔗 Live Google Sheet Link", "📁 Upload Excel/CSV File"], horizontal=True)
 
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-            st.success("CSV file loaded successfully!")
-        else:
-            xls = pd.ExcelFile(uploaded_file)
-            sheet_names = xls.sheet_names
-            
-            if len(sheet_names) > 1:
-                selected_sheet = st.selectbox("📂 Your Excel file has multiple tabs. Select the one you want to use:", sheet_names)
-            else:
-                selected_sheet = sheet_names[0]
-                
-            df = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
-            st.success(f"Excel Tab '{selected_sheet}' loaded successfully!")
+df = None 
+
+try:
+    if data_source == "🔗 Live Google Sheet Link":
+        st.info("💡 **Instructions:** Go to your Google Sheet -> Click 'Share' -> Set to **'Anyone with the link can view'** -> Copy link and paste it below.")
+        gsheet_url = st.text_input("Paste your live Google Sheet link here:")
         
+        if gsheet_url:
+            if "docs.google.com/spreadsheets" in gsheet_url:
+                match = re.search(r'd/([a-zA-Z0-9-_]+)', gsheet_url)
+                gid_match = re.search(r'gid=([0-9]+)', gsheet_url)
+                
+                if match:
+                    sheet_id = match.group(1)
+                    gid = gid_match.group(1) if gid_match else "0"
+                    
+                    csv_export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+                    
+                    df = pd.read_csv(csv_export_url)
+                    st.success("✅ Live Google Sheet connected successfully!")
+                else:
+                    st.error("🛑 That doesn't look like a valid Google Sheets link.")
+            else:
+                st.error("🛑 Please paste a valid Google Sheets URL.")
+
+    else:
+        uploaded_file = st.file_uploader("Upload your Excel or CSV file here", type=["csv", "xlsx", "xls"])
+        
+        if uploaded_file is not None:
+            if uploaded_file.name.endswith('.csv'):
+                df = pd.read_csv(uploaded_file)
+                st.success("✅ CSV file loaded successfully!")
+            else:
+                xls = pd.ExcelFile(uploaded_file)
+                sheet_names = xls.sheet_names
+                
+                if len(sheet_names) > 1:
+                    selected_sheet = st.selectbox("📂 Your Excel file has multiple tabs. Select the one you want to use:", sheet_names)
+                else:
+                    selected_sheet = sheet_names[0]
+                    
+                df = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
+                st.success(f"✅ Excel Tab '{selected_sheet}' loaded successfully!")
+
+    if df is not None:
         st.divider()
         
         # --- PARETO TYPE SELECTION ---
-        st.write("### 1. Analysis Type")
-        pareto_category = st.text_input("What are you analyzing? (e.g., Defect, Part, Machine, Scrap)", "Defect")
+        st.write("### Step 2: Analysis Type & Pareto Title")
+        pareto_category = st.text_input("What are you analyzing? This will become your Chart Title (e.g., Defect, Part, Machine, Scrap)", "Defect")
         
         st.divider()
 
         # --- OPTIONAL FILTERING ---
-        st.write("### 2. Filter Data (Optional)")
+        st.write("### Step 3: Filter Data (Optional)")
         filter_col = st.selectbox("Filter by Column:", ["No Filter"] + list(df.columns))
         
         if filter_col != "No Filter":
@@ -73,13 +103,12 @@ if uploaded_file is not None:
             dynamic_prefix = "Pricol" 
             
         # --- CHART DETAILS & SETTINGS ---
-        st.write("### 3. Chart Settings")
+        st.write("### Step 4: Chart Settings")
         col_title, col_month = st.columns(2)
         with col_title:
             custom_title = st.text_input("Custom Title Prefix", dynamic_prefix)
         with col_month:
-            # AUTO-FILL DATE LOGIC
-            current_date = datetime.now().strftime("%b %Y") # Gets current month and year (e.g., Mar 2026)
+            current_date = datetime.now().strftime("%b %Y") 
             report_month = st.text_input("Month & Year", current_date) 
             
         col1, col2 = st.columns(2)
@@ -120,25 +149,22 @@ if uploaded_file is not None:
                     
                     chart_title = f"{custom_title} - {report_month} {pareto_category.lower()} pareto"
 
-                    # --- CHART GENERATOR FUNCTION (Used for both Normal and Highlighted views) ---
                     def create_pareto_chart(highlight_80=False):
                         fig, ax1 = plt.subplots(figsize=(20, 7), dpi=300) 
                         
-                        # Dynamic Color Logic for the 80% Highlight
                         bar_colors = []
                         crossed_80 = False
                         for pct in cumulative_percent:
                             if highlight_80:
                                 if not crossed_80:
-                                    bar_colors.append('#4285F4') # Bright Blue for the Top 80%
+                                    bar_colors.append('#4285F4') 
                                     if pct >= 80:
                                         crossed_80 = True
                                 else:
-                                    bar_colors.append('#CFD8DC') # Muted Gray for the rest
+                                    bar_colors.append('#CFD8DC') 
                             else:
-                                bar_colors.append('#4285F4') # Standard Blue for everything
+                                bar_colors.append('#4285F4') 
 
-                        # Plot Bars
                         bars = ax1.bar(labels, counts, color=bar_colors, width=0.6, label='SUM of Actual Quantity')
                         ax1.set_ylabel('') 
                         
@@ -148,7 +174,6 @@ if uploaded_file is not None:
                         ax1.set_xticklabels(labels, rotation=45, ha='right', rotation_mode='anchor', fontsize=13)
                         ax1.tick_params(axis='y', labelsize=13)
 
-                        # Match text color to bar color
                         for idx, bar in enumerate(bars):
                             yval = int(bar.get_height())
                             text_color = bar_colors[idx]
@@ -156,7 +181,6 @@ if uploaded_file is not None:
                                 ax1.text(bar.get_x() + bar.get_width()/2, yval + (max_val*0.02), f"{yval}", 
                                          ha='center', va='bottom', color=text_color, fontweight='bold', fontsize=12)
 
-                        # Plot Line
                         ax2 = ax1.twinx()
                         line_color = '#EA4335' 
                         ax2.plot(labels, cumulative_percent, color=line_color, linewidth=3, label='Cumm Rej %') 
@@ -165,10 +189,8 @@ if uploaded_file is not None:
                         ax2.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=0))
                         ax2.tick_params(axis='y', labelsize=13)
 
-                        # If highlighting, draw a clear dashed line at 80%
                         if highlight_80:
                             ax2.axhline(80, color='gray', linestyle='--', linewidth=1.5, alpha=0.6)
-                            # Adding a small text label to the 80% line
                             ax2.text(len(labels)-0.5, 82, "80% Cutoff", color='gray', ha='right', fontsize=12, style='italic')
 
                         for i in range(len(labels)):
@@ -192,13 +214,11 @@ if uploaded_file is not None:
                         plt.tight_layout()
                         return fig
 
-                    # --- RENDER BOTH CHARTS USING TABS ---
                     fig_normal = create_pareto_chart(highlight_80=False)
                     fig_highlighted = create_pareto_chart(highlight_80=True)
                     
                     time.sleep(0.5) 
                     
-                    # Displaying them side-by-side using UI Tabs
                     tab1, tab2 = st.tabs(["📊 Normal View", "🎯 80% Highlighted View"])
                     
                     with tab1:
@@ -206,10 +226,10 @@ if uploaded_file is not None:
                         
                     with tab2:
                         st.pyplot(fig_highlighted)
-                        st.info("💡 **Pro Tip:** In this view, the bars that contribute to the top 80% of your total volume are highlighted in blue. The 'trivial many' are grayed out. Focus your team's root-cause analysis on the blue bars first!")
+                        st.info("💡 **Pro Tip:** In this view, the bars that contribute to the top 80% of your total volume are highlighted in blue. The 'trivial many' are grayed out.")
                     
                     st.toast(f"{pareto_category} Pareto generated successfully.", icon="✅")
-                
-    except Exception as e:
-        st.error("🛑 **Something went wrong while reading your file!**")
-        st.warning(f"👉 **How to fix it:** Make sure your Excel sheet doesn't have merged cells or completely blank rows at the very top. \n\n *(Technical error: {e})*")
+
+except Exception as e:
+    st.error("🛑 **Something went wrong while connecting to your data!**")
+    st.warning(f"👉 **How to fix it:** If you are using a Google Sheet, make sure you clicked 'Share' and set it to 'Anyone with the link can view'. \n\n *(Technical error: {e})*")
