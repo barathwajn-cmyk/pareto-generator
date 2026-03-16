@@ -28,7 +28,7 @@ if not st.session_state.authenticated:
 
 # --- MAIN APP LOGIC ---
 st.title("⚙️ Auto Pareto Chart Generator")
-st.write("Upload your data to instantly generate a clean Pareto chart.")
+st.write("Upload your data to instantly generate a crisp, high-definition Pareto chart.")
 
 # --- FILE UPLOADER ---
 uploaded_file = st.file_uploader("Upload your Excel or CSV file here", type=["csv", "xlsx", "xls"])
@@ -98,7 +98,7 @@ if uploaded_file is not None:
                 with st.spinner("Crunching the numbers and drawing the chart..."):
                     
                     # 1. Data Processing (FORCE INTEGERS)
-                    working_df[qty_col] = working_df[qty_col].fillna(0).astype(int) # Strip decimals immediately
+                    working_df[qty_col] = working_df[qty_col].fillna(0).astype(int) 
                     processed_df = working_df.groupby(category_col)[qty_col].sum().reset_index()
                     processed_df = processed_df.sort_values(by=qty_col, ascending=False).reset_index(drop=True)
                     
@@ -110,76 +110,80 @@ if uploaded_file is not None:
                         processed_df = pd.concat([top_df, others_df], ignore_index=True)
                     
                     raw_labels = processed_df[category_col].astype(str).tolist()
-                    counts = processed_df[qty_col].tolist() # These are guaranteed integers now
+                    counts = processed_df[qty_col].tolist() 
                     
-                    # Wrap text slightly wider to look like your reference image
                     labels = [textwrap.fill(label, width=25) for label in raw_labels]
                     
                     total_defects = sum(counts)
                     cumulative_counts = np.cumsum(counts)
                     cumulative_percent = (cumulative_counts / total_defects) * 100
 
-                    # 3. Chart Generation (WIDE LAYOUT)
-                    fig, ax1 = plt.subplots(figsize=(20, 6)) # Made it much wider and flatter
+                    # 3. Chart Generation (HD Quality: dpi=300)
+                    # We increased the height slightly from 6 to 7 to accommodate bigger fonts
+                    fig, ax1 = plt.subplots(figsize=(20, 7), dpi=300) 
 
                     bar_color = '#4285F4' 
                     bars = ax1.bar(labels, counts, color=bar_color, width=0.6, label='SUM of Actual Quantity')
                     
-                    # Hide left/right axis labels to match your clean look
                     ax1.set_ylabel('') 
                     
                     max_val = max(counts) if counts else 10
-                    ax1.set_ylim(0, max_val * 1.25) # Extra headroom for the top legend
+                    ax1.set_ylim(0, max_val * 1.25) 
                     ax1.set_xticks(range(len(labels)))
                     
-                    # Angle set to 45 to match your reference image
-                    ax1.set_xticklabels(labels, rotation=45, ha='right', rotation_mode='anchor', fontsize=10)
+                    # Increased font size for X-axis labels from 10 to 13
+                    ax1.set_xticklabels(labels, rotation=45, ha='right', rotation_mode='anchor', fontsize=13)
+                    
+                    # Increased font size for Y-axis (left) numbers from default to 13
+                    ax1.tick_params(axis='y', labelsize=13)
 
-                    # Bar values (Strict Integers)
+                    # Increased font size for numbers on top of bars from 10 to 12
                     for bar in bars:
                         yval = int(bar.get_height())
                         if yval > 0:
                             ax1.text(bar.get_x() + bar.get_width()/2, yval + (max_val*0.02), f"{yval}", 
-                                     ha='center', va='bottom', color=bar_color, fontweight='bold', fontsize=10)
+                                     ha='center', va='bottom', color=bar_color, fontweight='bold', fontsize=12)
 
                     ax2 = ax1.twinx()
                     line_color = '#EA4335' 
-                    ax2.plot(labels, cumulative_percent, color=line_color, linewidth=2.5, label='Cumm Rej %')
+                    ax2.plot(labels, cumulative_percent, color=line_color, linewidth=3, label='Cumm Rej %') # Made line slightly thicker
                     
-                    # Right axis percentage limits and formatting (Strict Integers)
                     ax2.set_ylim(0, 115)
                     ax2.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=0))
+                    
+                    # Increased font size for Y-axis (right) numbers to 13
+                    ax2.tick_params(axis='y', labelsize=13)
 
-                    # Line values (Strict Integers)
+                    # Increased font size for percentages on the red line from 9 to 12
                     for i in range(len(labels)):
                         pct_val = int(round(cumulative_percent[i]))
-                        # Offset the text slightly depending on position to avoid overlapping bars
                         v_align = 'bottom' if pct_val > 90 else 'top'
-                        ax2.text(i, cumulative_percent[i] + 2, f'{pct_val}%', 
-                                 ha='center', va=v_align, color=line_color, fontweight='bold', fontsize=9)
+                        # Added slight vertical offset for the text to clear the thicker line
+                        y_offset = 2 if pct_val > 90 else -4 
+                        ax2.text(i, cumulative_percent[i] + y_offset, f'{pct_val}%', 
+                                 ha='center', va=v_align, color=line_color, fontweight='bold', fontsize=12)
 
                     chart_title = f"{custom_title} - {pareto_category} pareto"
                     
-                    # Legend placed at the top center, matching your image
+                    # Increased font size for the legend from 11 to 14
                     lines_1, labels_1 = ax1.get_legend_handles_labels()
                     lines_2, labels_2 = ax2.get_legend_handles_labels()
-                    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize=11)
+                    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize=14)
 
-                    # Title placed above the legend
-                    plt.text(0.5, 1.25, chart_title, transform=ax1.transAxes, ha='center', fontsize=18, fontweight='bold')
+                    # Increased font size for the Main Title from 18 to 24
+                    plt.text(0.5, 1.25, chart_title, transform=ax1.transAxes, ha='center', fontsize=24, fontweight='bold')
                     
-                    ax1.grid(axis='y', linestyle='-', alpha=0.3) # Softer grid lines
+                    ax1.grid(axis='y', linestyle='-', alpha=0.3) 
                     ax1.spines['top'].set_visible(False)
                     ax2.spines['top'].set_visible(False)
                     
-                    # Format Left Y-Axis to strictly integers
                     ax1.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
 
                     plt.tight_layout()
                     
                     time.sleep(0.5) 
                     
-                    # 4. Display Chart
+                    # 4. Display Chart in Streamlit
                     st.pyplot(fig)
                     
                     st.toast(f"{pareto_category} Pareto generated successfully.", icon="✅")
