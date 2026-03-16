@@ -69,15 +69,15 @@ if uploaded_file is not None:
             dynamic_prefix = str(filter_val)
         else:
             working_df = df.copy()
-            dynamic_prefix = "Overall"
+            dynamic_prefix = "Pricol" # Defaulted to Pricol based on your screenshots
             
         # --- CHART DETAILS & SETTINGS ---
         st.write("### 3. Chart Settings")
         col_title, col_month = st.columns(2)
         with col_title:
-            custom_title = st.text_input("Custom Title (Shows at the top of the chart)", dynamic_prefix)
+            custom_title = st.text_input("Custom Title Prefix", dynamic_prefix)
         with col_month:
-            report_month = st.text_input("Month & Year", "Jan 2024")
+            report_month = st.text_input("Month & Year", "Jan 2024") # This is back in action!
             
         col1, col2 = st.columns(2)
         with col1:
@@ -97,12 +97,10 @@ if uploaded_file is not None:
             else:
                 with st.spinner("Crunching the numbers and drawing the chart..."):
                     
-                    # 1. Data Processing (FORCE INTEGERS)
                     working_df[qty_col] = working_df[qty_col].fillna(0).astype(int) 
                     processed_df = working_df.groupby(category_col)[qty_col].sum().reset_index()
                     processed_df = processed_df.sort_values(by=qty_col, ascending=False).reset_index(drop=True)
                     
-                    # 2. Group into "Others"
                     if len(processed_df) > top_n:
                         top_df = processed_df.iloc[:top_n].copy()
                         others_qty = processed_df.iloc[top_n:][qty_col].sum()
@@ -118,8 +116,6 @@ if uploaded_file is not None:
                     cumulative_counts = np.cumsum(counts)
                     cumulative_percent = (cumulative_counts / total_defects) * 100
 
-                    # 3. Chart Generation (HD Quality: dpi=300)
-                    # We increased the height slightly from 6 to 7 to accommodate bigger fonts
                     fig, ax1 = plt.subplots(figsize=(20, 7), dpi=300) 
 
                     bar_color = '#4285F4' 
@@ -131,13 +127,9 @@ if uploaded_file is not None:
                     ax1.set_ylim(0, max_val * 1.25) 
                     ax1.set_xticks(range(len(labels)))
                     
-                    # Increased font size for X-axis labels from 10 to 13
                     ax1.set_xticklabels(labels, rotation=45, ha='right', rotation_mode='anchor', fontsize=13)
-                    
-                    # Increased font size for Y-axis (left) numbers from default to 13
                     ax1.tick_params(axis='y', labelsize=13)
 
-                    # Increased font size for numbers on top of bars from 10 to 12
                     for bar in bars:
                         yval = int(bar.get_height())
                         if yval > 0:
@@ -146,31 +138,26 @@ if uploaded_file is not None:
 
                     ax2 = ax1.twinx()
                     line_color = '#EA4335' 
-                    ax2.plot(labels, cumulative_percent, color=line_color, linewidth=3, label='Cumm Rej %') # Made line slightly thicker
+                    ax2.plot(labels, cumulative_percent, color=line_color, linewidth=3, label='Cumm Rej %') 
                     
                     ax2.set_ylim(0, 115)
                     ax2.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=0))
-                    
-                    # Increased font size for Y-axis (right) numbers to 13
                     ax2.tick_params(axis='y', labelsize=13)
 
-                    # Increased font size for percentages on the red line from 9 to 12
                     for i in range(len(labels)):
                         pct_val = int(round(cumulative_percent[i]))
                         v_align = 'bottom' if pct_val > 90 else 'top'
-                        # Added slight vertical offset for the text to clear the thicker line
                         y_offset = 2 if pct_val > 90 else -4 
                         ax2.text(i, cumulative_percent[i] + y_offset, f'{pct_val}%', 
                                  ha='center', va=v_align, color=line_color, fontweight='bold', fontsize=12)
 
-                    chart_title = f"{custom_title} - {pareto_category} pareto"
+                    # --- THE FIX: ADDING THE MONTH & YEAR BACK INTO THE TITLE ---
+                    chart_title = f"{custom_title} - {report_month} {pareto_category.lower()} pareto"
                     
-                    # Increased font size for the legend from 11 to 14
                     lines_1, labels_1 = ax1.get_legend_handles_labels()
                     lines_2, labels_2 = ax2.get_legend_handles_labels()
                     ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize=14)
 
-                    # Increased font size for the Main Title from 18 to 24
                     plt.text(0.5, 1.25, chart_title, transform=ax1.transAxes, ha='center', fontsize=24, fontweight='bold')
                     
                     ax1.grid(axis='y', linestyle='-', alpha=0.3) 
@@ -180,12 +167,9 @@ if uploaded_file is not None:
                     ax1.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
 
                     plt.tight_layout()
-                    
                     time.sleep(0.5) 
                     
-                    # 4. Display Chart in Streamlit
                     st.pyplot(fig)
-                    
                     st.toast(f"{pareto_category} Pareto generated successfully.", icon="✅")
                 
     except Exception as e:
