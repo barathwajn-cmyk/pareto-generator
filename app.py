@@ -19,6 +19,7 @@ if not st.session_state.authenticated:
     pwd = st.text_input("Access Key:", type="password")
     
     if st.button("Login"):
+        # Change this password to whatever you want
         if pwd == "Pricol2024!": 
             st.session_state.authenticated = True
             st.rerun()
@@ -53,15 +54,9 @@ if uploaded_file is not None:
         
         st.divider()
         
-        # --- PARETO TYPE SELECTION ---
+        # --- PARETO TYPE SELECTION (CUSTOMIZED) ---
         st.write("### 1. Analysis Type")
-        pareto_type = st.radio(
-            "What type of Pareto are you generating?",
-            ["Defect Pareto", "Part Pareto"],
-            horizontal=True
-        )
-        
-        category_label = "Defect" if pareto_type == "Defect Pareto" else "Part"
+        pareto_category = st.text_input("What are you analyzing? (e.g., Defect, Part, Machine, Scrap)", "Defect")
         
         st.divider()
 
@@ -90,11 +85,11 @@ if uploaded_file is not None:
             
         col1, col2 = st.columns(2)
         with col1:
-            category_col = st.selectbox(f"Column: {category_label} Names", working_df.columns)
+            category_col = st.selectbox(f"Column: {pareto_category} Names", working_df.columns)
         with col2:
             qty_col = st.selectbox("Column: Quantities (Must be numbers!)", working_df.columns)
             
-        top_n = st.slider(f"How many top {category_label.lower()}s to show before grouping the rest into 'Others'?", min_value=5, max_value=35, value=15)
+        top_n = st.slider(f"How many top {pareto_category.lower()}s to show before grouping the rest into 'Others'?", min_value=5, max_value=35, value=15)
             
         # --- GENERATE CHART BUTTON ---
         if st.button("Generate Pareto Chart"):
@@ -159,7 +154,8 @@ if uploaded_file is not None:
                         ax2.text(i, cumulative_percent[i] + 2, f'{cumulative_percent[i]:.1f}%', 
                                  ha='center', va='bottom', color=line_color, fontweight='bold', fontsize=8)
 
-                    chart_title = f"{custom_title} - {pareto_type} Analysis ({report_month})"
+                    # Dynamic title incorporating the custom word
+                    chart_title = f"{custom_title} - {pareto_category} Pareto Analysis ({report_month})"
                     plt.title(chart_title, fontsize=18, fontweight='bold', pad=20)
                     
                     ax1.grid(axis='y', linestyle='--', alpha=0.6)
@@ -177,7 +173,7 @@ if uploaded_file is not None:
                     # 4. Display Chart
                     st.pyplot(fig)
                     
-                    st.toast(f"{pareto_type} generated successfully.", icon="✅")
+                    st.toast(f"{pareto_category} Pareto generated successfully.", icon="✅")
                 
     except Exception as e:
         st.error("🛑 **Something went wrong while reading your file!**")
