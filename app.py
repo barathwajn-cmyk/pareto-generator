@@ -5,6 +5,7 @@ import matplotlib.ticker as mtick
 import numpy as np
 import textwrap
 import time
+from datetime import datetime
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Auto Pareto Generator", layout="wide", page_icon="⚙️")
@@ -69,7 +70,7 @@ if uploaded_file is not None:
             dynamic_prefix = str(filter_val)
         else:
             working_df = df.copy()
-            dynamic_prefix = "Pricol" # Defaulted to Pricol based on your screenshots
+            dynamic_prefix = "Pricol" 
             
         # --- CHART DETAILS & SETTINGS ---
         st.write("### 3. Chart Settings")
@@ -77,7 +78,9 @@ if uploaded_file is not None:
         with col_title:
             custom_title = st.text_input("Custom Title Prefix", dynamic_prefix)
         with col_month:
-            report_month = st.text_input("Month & Year", "Jan 2024") # This is back in action!
+            # AUTO-FILL DATE LOGIC
+            current_date = datetime.now().strftime("%b %Y") # Gets current month and year (e.g., Mar 2026)
+            report_month = st.text_input("Month & Year", current_date) 
             
         col1, col2 = st.columns(2)
         with col1:
@@ -109,67 +112,102 @@ if uploaded_file is not None:
                     
                     raw_labels = processed_df[category_col].astype(str).tolist()
                     counts = processed_df[qty_col].tolist() 
-                    
                     labels = [textwrap.fill(label, width=25) for label in raw_labels]
                     
                     total_defects = sum(counts)
                     cumulative_counts = np.cumsum(counts)
                     cumulative_percent = (cumulative_counts / total_defects) * 100
-
-                    fig, ax1 = plt.subplots(figsize=(20, 7), dpi=300) 
-
-                    bar_color = '#4285F4' 
-                    bars = ax1.bar(labels, counts, color=bar_color, width=0.6, label='SUM of Actual Quantity')
                     
-                    ax1.set_ylabel('') 
-                    
-                    max_val = max(counts) if counts else 10
-                    ax1.set_ylim(0, max_val * 1.25) 
-                    ax1.set_xticks(range(len(labels)))
-                    
-                    ax1.set_xticklabels(labels, rotation=45, ha='right', rotation_mode='anchor', fontsize=13)
-                    ax1.tick_params(axis='y', labelsize=13)
-
-                    for bar in bars:
-                        yval = int(bar.get_height())
-                        if yval > 0:
-                            ax1.text(bar.get_x() + bar.get_width()/2, yval + (max_val*0.02), f"{yval}", 
-                                     ha='center', va='bottom', color=bar_color, fontweight='bold', fontsize=12)
-
-                    ax2 = ax1.twinx()
-                    line_color = '#EA4335' 
-                    ax2.plot(labels, cumulative_percent, color=line_color, linewidth=3, label='Cumm Rej %') 
-                    
-                    ax2.set_ylim(0, 115)
-                    ax2.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=0))
-                    ax2.tick_params(axis='y', labelsize=13)
-
-                    for i in range(len(labels)):
-                        pct_val = int(round(cumulative_percent[i]))
-                        v_align = 'bottom' if pct_val > 90 else 'top'
-                        y_offset = 2 if pct_val > 90 else -4 
-                        ax2.text(i, cumulative_percent[i] + y_offset, f'{pct_val}%', 
-                                 ha='center', va=v_align, color=line_color, fontweight='bold', fontsize=12)
-
-                    # --- THE FIX: ADDING THE MONTH & YEAR BACK INTO THE TITLE ---
                     chart_title = f"{custom_title} - {report_month} {pareto_category.lower()} pareto"
-                    
-                    lines_1, labels_1 = ax1.get_legend_handles_labels()
-                    lines_2, labels_2 = ax2.get_legend_handles_labels()
-                    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize=14)
 
-                    plt.text(0.5, 1.25, chart_title, transform=ax1.transAxes, ha='center', fontsize=24, fontweight='bold')
-                    
-                    ax1.grid(axis='y', linestyle='-', alpha=0.3) 
-                    ax1.spines['top'].set_visible(False)
-                    ax2.spines['top'].set_visible(False)
-                    
-                    ax1.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
+                    # --- CHART GENERATOR FUNCTION (Used for both Normal and Highlighted views) ---
+                    def create_pareto_chart(highlight_80=False):
+                        fig, ax1 = plt.subplots(figsize=(20, 7), dpi=300) 
+                        
+                        # Dynamic Color Logic for the 80% Highlight
+                        bar_colors = []
+                        crossed_80 = False
+                        for pct in cumulative_percent:
+                            if highlight_80:
+                                if not crossed_80:
+                                    bar_colors.append('#4285F4') # Bright Blue for the Top 80%
+                                    if pct >= 80:
+                                        crossed_80 = True
+                                else:
+                                    bar_colors.append('#CFD8DC') # Muted Gray for the rest
+                            else:
+                                bar_colors.append('#4285F4') # Standard Blue for everything
 
-                    plt.tight_layout()
+                        # Plot Bars
+                        bars = ax1.bar(labels, counts, color=bar_colors, width=0.6, label='SUM of Actual Quantity')
+                        ax1.set_ylabel('') 
+                        
+                        max_val = max(counts) if counts else 10
+                        ax1.set_ylim(0, max_val * 1.25) 
+                        ax1.set_xticks(range(len(labels)))
+                        ax1.set_xticklabels(labels, rotation=45, ha='right', rotation_mode='anchor', fontsize=13)
+                        ax1.tick_params(axis='y', labelsize=13)
+
+                        # Match text color to bar color
+                        for idx, bar in enumerate(bars):
+                            yval = int(bar.get_height())
+                            text_color = bar_colors[idx]
+                            if yval > 0:
+                                ax1.text(bar.get_x() + bar.get_width()/2, yval + (max_val*0.02), f"{yval}", 
+                                         ha='center', va='bottom', color=text_color, fontweight='bold', fontsize=12)
+
+                        # Plot Line
+                        ax2 = ax1.twinx()
+                        line_color = '#EA4335' 
+                        ax2.plot(labels, cumulative_percent, color=line_color, linewidth=3, label='Cumm Rej %') 
+                        
+                        ax2.set_ylim(0, 115)
+                        ax2.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=0))
+                        ax2.tick_params(axis='y', labelsize=13)
+
+                        # If highlighting, draw a clear dashed line at 80%
+                        if highlight_80:
+                            ax2.axhline(80, color='gray', linestyle='--', linewidth=1.5, alpha=0.6)
+                            # Adding a small text label to the 80% line
+                            ax2.text(len(labels)-0.5, 82, "80% Cutoff", color='gray', ha='right', fontsize=12, style='italic')
+
+                        for i in range(len(labels)):
+                            pct_val = int(round(cumulative_percent[i]))
+                            v_align = 'bottom' if pct_val > 90 else 'top'
+                            y_offset = 2 if pct_val > 90 else -4 
+                            ax2.text(i, cumulative_percent[i] + y_offset, f'{pct_val}%', 
+                                     ha='center', va=v_align, color=line_color, fontweight='bold', fontsize=12)
+                        
+                        lines_1, labels_1 = ax1.get_legend_handles_labels()
+                        lines_2, labels_2 = ax2.get_legend_handles_labels()
+                        ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize=14)
+
+                        plt.text(0.5, 1.25, chart_title, transform=ax1.transAxes, ha='center', fontsize=24, fontweight='bold')
+                        
+                        ax1.grid(axis='y', linestyle='-', alpha=0.3) 
+                        ax1.spines['top'].set_visible(False)
+                        ax2.spines['top'].set_visible(False)
+                        ax1.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
+
+                        plt.tight_layout()
+                        return fig
+
+                    # --- RENDER BOTH CHARTS USING TABS ---
+                    fig_normal = create_pareto_chart(highlight_80=False)
+                    fig_highlighted = create_pareto_chart(highlight_80=True)
+                    
                     time.sleep(0.5) 
                     
-                    st.pyplot(fig)
+                    # Displaying them side-by-side using UI Tabs
+                    tab1, tab2 = st.tabs(["📊 Normal View", "🎯 80% Highlighted View"])
+                    
+                    with tab1:
+                        st.pyplot(fig_normal)
+                        
+                    with tab2:
+                        st.pyplot(fig_highlighted)
+                        st.info("💡 **Pro Tip:** In this view, the bars that contribute to the top 80% of your total volume are highlighted in blue. The 'trivial many' are grayed out. Focus your team's root-cause analysis on the blue bars first!")
+                    
                     st.toast(f"{pareto_category} Pareto generated successfully.", icon="✅")
                 
     except Exception as e:
