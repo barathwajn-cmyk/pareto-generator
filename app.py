@@ -7,7 +7,7 @@ import textwrap
 import time
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Auto Pareto Generator", layout="centered", page_icon="⚙️")
+st.set_page_config(page_title="Auto Pareto Generator", layout="wide", page_icon="⚙️")
 
 # --- SECURITY GATE (PASSWORD) ---
 if "authenticated" not in st.session_state:
@@ -19,7 +19,6 @@ if not st.session_state.authenticated:
     pwd = st.text_input("Access Key:", type="password")
     
     if st.button("Login"):
-        # Change this password to whatever you want
         if pwd == "Pricol2024!": 
             st.session_state.authenticated = True
             st.rerun()
@@ -36,7 +35,6 @@ uploaded_file = st.file_uploader("Upload your Excel or CSV file here", type=["cs
 
 if uploaded_file is not None:
     try:
-        # --- SHEET SELECTION LOGIC ---
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
             st.success("CSV file loaded successfully!")
@@ -54,16 +52,14 @@ if uploaded_file is not None:
         
         st.divider()
         
-        # --- PARETO TYPE SELECTION (CUSTOMIZED) ---
+        # --- PARETO TYPE SELECTION ---
         st.write("### 1. Analysis Type")
         pareto_category = st.text_input("What are you analyzing? (e.g., Defect, Part, Machine, Scrap)", "Defect")
         
         st.divider()
 
-        # --- OPTIONAL FILTERING (SECOND-LEVEL PARETO) ---
+        # --- OPTIONAL FILTERING ---
         st.write("### 2. Filter Data (Optional)")
-        st.write("Want to look at just one specific vendor or part? Select a column here to filter the data.")
-        
         filter_col = st.selectbox("Filter by Column:", ["No Filter"] + list(df.columns))
         
         if filter_col != "No Filter":
@@ -81,7 +77,7 @@ if uploaded_file is not None:
         with col_title:
             custom_title = st.text_input("Custom Title (Shows at the top of the chart)", dynamic_prefix)
         with col_month:
-            report_month = st.text_input("Month & Year", "Feb 2024")
+            report_month = st.text_input("Month & Year", "Jan 2024")
             
         col1, col2 = st.columns(2)
         with col1:
@@ -89,24 +85,20 @@ if uploaded_file is not None:
         with col2:
             qty_col = st.selectbox("Column: Quantities (Must be numbers!)", working_df.columns)
             
-        top_n = st.slider(f"How many top {pareto_category.lower()}s to show before grouping the rest into 'Others'?", min_value=5, max_value=35, value=15)
+        top_n = st.slider(f"How many top {pareto_category.lower()}s to show before grouping the rest into 'Others'?", min_value=5, max_value=40, value=25)
             
         # --- GENERATE CHART BUTTON ---
         if st.button("Generate Pareto Chart"):
             
             if working_df.empty:
                 st.error("🛑 **Oops! There is no data for this specific filter.**")
-                st.warning("👉 **How to fix it:** Try selecting a different filter in Step 2, or change it back to 'No Filter'.")
-            
-            # --- LAYMAN-PROOF DATA VALIDATION ---
             elif not pd.api.types.is_numeric_dtype(working_df[qty_col]):
                 st.error(f"🛑 **Wait a second!** The column you chose for Quantities (`{qty_col}`) has text or words in it.")
-                st.warning("👉 **How to fix it:** Go to 'Step 3: Chart Settings' above. Change the **'Column: Quantities'** box to a column that only has numbers (like 1, 5, 144) so the chart can do the math.")
-            
             else:
                 with st.spinner("Crunching the numbers and drawing the chart..."):
                     
-                    # 1. Data Processing
+                    # 1. Data Processing (FORCE INTEGERS)
+                    working_df[qty_col] = working_df[qty_col].fillna(0).astype(int) # Strip decimals immediately
                     processed_df = working_df.groupby(category_col)[qty_col].sum().reset_index()
                     processed_df = processed_df.sort_values(by=qty_col, ascending=False).reset_index(drop=True)
                     
@@ -118,53 +110,70 @@ if uploaded_file is not None:
                         processed_df = pd.concat([top_df, others_df], ignore_index=True)
                     
                     raw_labels = processed_df[category_col].astype(str).tolist()
-                    counts = processed_df[qty_col].tolist()
+                    counts = processed_df[qty_col].tolist() # These are guaranteed integers now
                     
-                    labels = [textwrap.fill(label, width=18) for label in raw_labels]
+                    # Wrap text slightly wider to look like your reference image
+                    labels = [textwrap.fill(label, width=25) for label in raw_labels]
                     
                     total_defects = sum(counts)
                     cumulative_counts = np.cumsum(counts)
                     cumulative_percent = (cumulative_counts / total_defects) * 100
 
-                    # 3. Chart Generation 
-                    fig, ax1 = plt.subplots(figsize=(18, 8)) 
+                    # 3. Chart Generation (WIDE LAYOUT)
+                    fig, ax1 = plt.subplots(figsize=(20, 6)) # Made it much wider and flatter
 
                     bar_color = '#4285F4' 
-                    bars = ax1.bar(labels, counts, color=bar_color, width=0.6, label='Actual Quantity')
-                    ax1.set_ylabel('Quantity', color='black', fontsize=12)
+                    bars = ax1.bar(labels, counts, color=bar_color, width=0.6, label='SUM of Actual Quantity')
+                    
+                    # Hide left/right axis labels to match your clean look
+                    ax1.set_ylabel('') 
                     
                     max_val = max(counts) if counts else 10
-                    ax1.set_ylim(0, max_val * 1.15) 
+                    ax1.set_ylim(0, max_val * 1.25) # Extra headroom for the top legend
                     ax1.set_xticks(range(len(labels)))
-                    ax1.set_xticklabels(labels, rotation=65, ha='right', rotation_mode='anchor', fontsize=8)
+                    
+                    # Angle set to 45 to match your reference image
+                    ax1.set_xticklabels(labels, rotation=45, ha='right', rotation_mode='anchor', fontsize=10)
 
+                    # Bar values (Strict Integers)
                     for bar in bars:
-                        yval = bar.get_height()
+                        yval = int(bar.get_height())
                         if yval > 0:
-                            ax1.text(bar.get_x() + bar.get_width()/2, yval + (max_val*0.01), int(yval), 
-                                     ha='center', va='bottom', color=bar_color, fontweight='bold', fontsize=9)
+                            ax1.text(bar.get_x() + bar.get_width()/2, yval + (max_val*0.02), f"{yval}", 
+                                     ha='center', va='bottom', color=bar_color, fontweight='bold', fontsize=10)
 
                     ax2 = ax1.twinx()
                     line_color = '#EA4335' 
-                    ax2.plot(labels, cumulative_percent, color=line_color, marker='o', linewidth=2.5, label='Cumm Rej %')
-                    ax2.set_ylim(0, 110)
-                    ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
-
-                    for i in range(len(labels)):
-                        ax2.text(i, cumulative_percent[i] + 2, f'{cumulative_percent[i]:.1f}%', 
-                                 ha='center', va='bottom', color=line_color, fontweight='bold', fontsize=8)
-
-                    # Dynamic title incorporating the custom word
-                    chart_title = f"{custom_title} - {pareto_category} Pareto Analysis ({report_month})"
-                    plt.title(chart_title, fontsize=18, fontweight='bold', pad=20)
+                    ax2.plot(labels, cumulative_percent, color=line_color, linewidth=2.5, label='Cumm Rej %')
                     
-                    ax1.grid(axis='y', linestyle='--', alpha=0.6)
-                    ax1.spines['top'].set_visible(False)
-                    ax2.spines['top'].set_visible(False)
+                    # Right axis percentage limits and formatting (Strict Integers)
+                    ax2.set_ylim(0, 115)
+                    ax2.yaxis.set_major_formatter(mtick.PercentFormatter(decimals=0))
 
+                    # Line values (Strict Integers)
+                    for i in range(len(labels)):
+                        pct_val = int(round(cumulative_percent[i]))
+                        # Offset the text slightly depending on position to avoid overlapping bars
+                        v_align = 'bottom' if pct_val > 90 else 'top'
+                        ax2.text(i, cumulative_percent[i] + 2, f'{pct_val}%', 
+                                 ha='center', va=v_align, color=line_color, fontweight='bold', fontsize=9)
+
+                    chart_title = f"{custom_title} - {pareto_category} pareto"
+                    
+                    # Legend placed at the top center, matching your image
                     lines_1, labels_1 = ax1.get_legend_handles_labels()
                     lines_2, labels_2 = ax2.get_legend_handles_labels()
-                    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', bbox_to_anchor=(1.05, 1))
+                    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize=11)
+
+                    # Title placed above the legend
+                    plt.text(0.5, 1.25, chart_title, transform=ax1.transAxes, ha='center', fontsize=18, fontweight='bold')
+                    
+                    ax1.grid(axis='y', linestyle='-', alpha=0.3) # Softer grid lines
+                    ax1.spines['top'].set_visible(False)
+                    ax2.spines['top'].set_visible(False)
+                    
+                    # Format Left Y-Axis to strictly integers
+                    ax1.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
 
                     plt.tight_layout()
                     
